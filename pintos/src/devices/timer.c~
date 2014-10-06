@@ -105,7 +105,7 @@ timer_sleep (int64_t ticks)
   
   intr_enable();
   
-  
+  //debug_backtrace_all();
 
   sema_down (&t->semawait);
 }

@@ -415,7 +415,6 @@ remove_lock(struct lock *lock){
     if(t->cur_lock == lock){
       list_remove(e);
     }
-  }
 }
 	/*checks to see if current thread has highest priority from donations, if not set it*/
 void 
