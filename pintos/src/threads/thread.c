@@ -111,7 +111,7 @@ thread_start (void)
   /* Create the idle thread. */
   struct semaphore idle_started;
   sema_init (&idle_started, 0);
-  thread_create ("idle", PRI_DEFAULT, idle, &idle_started);
+  thread_create ("idle", PRI_MIN, idle, &idle_started);
 
   /* Start preemptive thread scheduling. */
   intr_enable ();
@@ -213,9 +213,9 @@ thread_create (const char *name, int priority,
   thread_unblock (t);
 
 	/*checks priority of new threads to see if it should yield*/
-  intr_disable();
+ /* intr_disable();
   check_yield();
-  intr_enable();
+  intr_enable();*/
   return tid;
 }
 
@@ -314,19 +314,17 @@ thread_exit (void)
 /* Yields the CPU.  The current thread is not put to sleep and
    may be scheduled again immediately at the scheduler's whim. */
 void
-thread_yield (void) 
+thread_yield (void)
 {
-  struct thread *cur = thread_current ();
-  enum intr_level old_level;
-  
-  ASSERT (!intr_context ());
-
-  old_level = intr_disable ();
-  if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem);
-  cur->status = THREAD_READY;
-  schedule ();
-  intr_set_level (old_level);
+struct thread *cur = thread_current ();
+enum intr_level old_level;
+ASSERT (!intr_context ());
+old_level = intr_disable ();
+if (cur != idle_thread)
+list_push_back (&ready_list, &cur->elem);
+cur->status = THREAD_READY;
+schedule ();
+intr_set_level (old_level);
 }
 
 /* Invoke function 'func' on all threads, passing along 'aux'.
@@ -348,101 +346,18 @@ thread_foreach (thread_action_func *func, void *aux)
 
 	/* Sets the current thread's priority to NEW_PRIORITY. */
 void
-thread_set_priority (int new_priority) 
+thread_set_priority (int new_priority)
 {
-  intr_disable();
-  int old_priority = thread_current()->priority;
-  thread_current()->init_priority = new_priority;
-
-  if (old_priority < thread_current()->priority) {
-	donate();
-  }
-  
-  if (old_priority > thread_current()->priority){
-	check_yield();
-  }
-  intr_enable();
+thread_current ()->priority = new_priority;
 }
 
 	/* Returns the current thread's priority. */
 int
-thread_get_priority (void) 
+thread_get_priority (void)
 {
-  intr_disable();
-  int cur_pri = thread_current()->priority;
-  intr_enable();
-  return cur_pri;
+return thread_current ()->priority;
 }
 
-	/* donates priority */
-void 
-donate(void){
-  int depth = 0;
-  struct thread *t = thread_current();
-  struct lock *l = t->cur_lock;
-  while(depth < DEPTH_MAX && l){
-      depth++;
-      if (!l->holder){
-         return;
-      }
-      if (l->holder->priority >= t->priority){
-       	return;
-      }
-      l->holder->priority = t->priority;
-      t = l->holder;
-      l = t->cur_lock;
-  }
-}
-
-	/* checks to see if current thread should yield to thread at front of ready list*/
-void 
-check_yield(void){
-  if ( list_empty(&ready_list) )
-  {	
-	return;
-  }
-  struct thread *t = list_entry(list_front(&ready_list), struct thread, elem);
-  if (thread_current()->priority < t->priority){
-	thread_yield();
-  }
-}
-
-void 
-remove_lock(struct lock *lock){
-  struct list_elem *e;
-  for(e=list_begin(&thread_current()->cur_donations);e!=list_end(&thread_current()->cur_donations);e=list_next(e)){
-    struct thread *t = list_entry(e, struct thread, donateelem);
-    if(t->cur_lock == lock){
-      list_remove(e);
-    }
-  }
-}
-	/*checks to see if current thread has highest priority from donations, if not set it*/
-void 
-check_priority(void){
-   struct thread *t = thread_current();
-   t->priority = t->init_priority;
-   if (list_empty(&t->cur_donations))
-   {
-      return;
-   }
-   struct thread *don_list = list_entry(list_front(&t->cur_donations), struct thread, donateelem);
-   if (don_list->priority > t->priority)
-   {
-      t->priority = don_list->priority;
-   }
-}
-	/*function to insert threads in an ordered list based on priority*/
-bool order_priority (const struct list_elem *a,const struct list_elem *b,void *aux UNUSED)
-{
-   struct thread *ta = list_entry(a, struct thread, elem);
-   struct thread *tb = list_entry(b, struct thread, elem);
-   if (ta->priority > tb->priority)
-   {
-      return true;
-   }
-   return false;
-}
 
 /* Sets the current thread's nice value to NICE. */
 void
