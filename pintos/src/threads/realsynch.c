@@ -197,7 +197,7 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
-  enum intr_level old_level = intr_disable();
+  intr_disable();
   if (lock->holder){
     thread_current()->cur_lock = lock;
     list_insert_ordered (&lock->holder->cur_donations, &thread_current()->donateelem,(list_less_func *) &order_priority, NULL);
@@ -207,7 +207,7 @@ lock_acquire (struct lock *lock)
 
   thread_current()->cur_lock = NULL;
   lock->holder = thread_current ();
-  intr_set_level (old_level);
+  intr_enable();
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -237,17 +237,15 @@ lock_try_acquire (struct lock *lock)
    handler. */
 void
 lock_release (struct lock *lock) 
-{ 
-
+{
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
-  enum intr_level old_level = intr_disable();
+  intr_disable();
   lock->holder = NULL;
   remove_lock(lock);
   check_priority();
   sema_up (&lock->semaphore);
-  intr_set_level (old_level);
-
+  intr_enable();
 }
 
 /* Returns true if the current thread holds LOCK, false

@@ -111,7 +111,7 @@ thread_start (void)
   /* Create the idle thread. */
   struct semaphore idle_started;
   sema_init (&idle_started, 0);
-  thread_create ("idle", PRI_MIN, idle, &idle_started);
+  thread_create ("idle", PRI_DEFAULT, idle, &idle_started);
 
   /* Start preemptive thread scheduling. */
   intr_enable ();
@@ -126,7 +126,7 @@ void
 thread_tick (void) 
 {
   struct thread *t = thread_current ();
-   thread_yield_to_higher_priority();
+
   /* Update statistics. */
   if (t == idle_thread)
     idle_ticks++;
@@ -213,9 +213,9 @@ thread_create (const char *name, int priority,
   thread_unblock (t);
 
 	/*checks priority of new threads to see if it should yield*/
-
-  thread_yield_to_higher_priority();
-
+  intr_disable();
+  check_yield();
+  intr_enable();
   return tid;
 }
 
@@ -271,6 +271,7 @@ struct thread *
 thread_current (void) 
 {
   struct thread *t = running_thread ();
+  
   /* Make sure T is really a thread.
      If either of these assertions fire, then your thread may
      have overflowed its stack.  Each thread has less than 4 kB
@@ -349,30 +350,28 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
- 
+  intr_disable();
   int old_priority = thread_current()->priority;
-  thread_current()->priority = new_priority;
+  thread_current()->init_priority = new_priority;
 
   if (old_priority < thread_current()->priority) {
 	donate();
   }
   
   if (old_priority > thread_current()->priority){
-	thread_yield_to_higher_priority();
+	check_yield();
   }
-  
+  intr_enable();
 }
 
 	/* Returns the current thread's priority. */
 int
 thread_get_priority (void) 
 {
-
   intr_disable();
   int cur_pri = thread_current()->priority;
   intr_enable();
   return cur_pri;
-  
 }
 
 	/* donates priority */
@@ -381,7 +380,7 @@ donate(void){
   int depth = 0;
   struct thread *t = thread_current();
   struct lock *l = t->cur_lock;
-  while((depth < DEPTH_MAX) && l){
+  while(depth < DEPTH_MAX && l){
       depth++;
       if (!l->holder){
          return;
@@ -395,34 +394,18 @@ donate(void){
   }
 }
 
-bool
-thread_lower_priority (const struct list_elem *a_,const struct list_elem *b_,void *aux UNUSED)
-{
-const struct thread *a = list_entry (a_, struct thread, elem);
-const struct thread *b = list_entry (b_, struct thread, elem);
-return a->priority < b->priority;
+	/* checks to see if current thread should yield to thread at front of ready list*/
+void 
+check_yield(void){
+  if ( list_empty(&ready_list) )
+  {	
+	return;
+  }
+  struct thread *t = list_entry(list_front(&ready_list), struct thread, elem);
+  if (thread_current()->priority < t->priority){
+	thread_yield();
+  }
 }
-
-void thread_yield_to_higher_priority (void)
-{
-  enum intr_level old_level = intr_disable ();
-  if (!list_empty (&ready_list)) {
-    struct thread *cur = thread_current ();
-    struct thread *max = list_entry (list_max (&ready_list, thread_lower_priority, NULL), struct thread, elem);
-   if (max->priority > cur->priority) {
-      if (intr_context ()) intr_yield_on_return ();
-      else
-        thread_yield ();
-      }
-   }
-   intr_set_level (old_level);
-}
-
-/* Returns true if thread a has
-lower priority than thread b,
-within a list of threads. */
-
-
 
 void 
 remove_lock(struct lock *lock){
@@ -438,6 +421,7 @@ remove_lock(struct lock *lock){
 void 
 check_priority(void){
    struct thread *t = thread_current();
+   t->priority = t->init_priority;
    if (list_empty(&t->cur_donations))
    {
       return;
@@ -582,6 +566,7 @@ init_thread (struct thread *t, const char *name, int priority)
 
 	/*priority */
 
+  t->init_priority = priority;
   t->cur_lock = NULL;
   list_init(&t->cur_donations);
 }
