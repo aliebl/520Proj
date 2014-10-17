@@ -35,7 +35,7 @@ process_execute (const char *file_name)
   char argv[4];
   tid_t tid;
 
-/*Go through command line input, and tokenize by spaces, then add to argv*/
+/*Go through command line input, and tokenize by spaces*/
 
   for (token = strtok_r (s, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr))  {
 
