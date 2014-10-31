@@ -1,0 +1,14 @@
+#ifndef USERPROG_SYSCALL_H
+#define USERPROG_SYSCALL_H
+
+void syscall_init (void);
+static void copy_in(const char *dest, char *start, int size);
+static char *copy_in_string(const char *us);
+void sys_halt(void) ;
+void sys_exit(int status);
+void sys_exec(const char *cmd_line);
+int sys_wait(int wat);
+void sys_create(const char *file, unsigned intial_size);
+void sys_remove(const char *file);
+int sys_open (const char *ufile);
+#endif /* userprog/syscall.h */

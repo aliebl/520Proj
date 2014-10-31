@@ -29,14 +29,14 @@ tid_t
 process_execute (const char *file_name) 
 {
   char *fn_copy;
-  char *token, *save_ptr;
-  char s[] = file_name;
-  int argc = 0;
-  char argv[4];
+  //char *token, *save_ptr;
+  //char s[] = file_name;
+  //int argc = 0;
+  //char argv[4];
   tid_t tid;
 
 /*Go through command line input, and tokenize by spaces, then add to argv*/
-
+/*
   for (token = strtok_r (s, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr))  {
 
   if (argc >= 5) { 
@@ -45,7 +45,7 @@ process_execute (const char *file_name)
   }
     argv[argc++] = token;     
   }
-
+*/
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
