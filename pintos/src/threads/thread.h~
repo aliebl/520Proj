@@ -80,13 +80,7 @@ typedef int tid_t;
    only because they are mutually exclusive: only a thread in the
    ready state is on the run queue, whereas only a thread in the
    blocked state is on a semaphore wait list. */
-struct file_descriptor 
-{
-  int handle;
-  struct list_elem elem;
-  struct file *file;
 
-};
 
 
 struct thread
@@ -99,12 +93,15 @@ struct thread
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
 
+    struct wait_status *wait_status;
+    struct list children;
+
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
-#ifdef USERPROG
+#ifdef USERPROGwhich
     /* Owned by userprog/process.c. */
-    uint32_t *pagedir;                  /* Page directory. */
+    uint32_t pagedir;                  /* Page directory. */
 #endif
 
     /* Owned by thread.c. */
@@ -112,7 +109,7 @@ struct thread
 
 
     int next_handle;
-    
+    struct list fds;
   };
 
 /* If false (default), use round-robin scheduler.
