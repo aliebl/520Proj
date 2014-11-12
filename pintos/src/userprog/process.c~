@@ -43,20 +43,75 @@ process_execute (const char *file_name)
   struct exec_info exec;
   char thread_name[16];
   char *save_ptr;
+  char *fn_copy;
+  char *args;
   tid_t tid;
 
   /* Initialize exec_info. */
   exec.file_name = file_name;
   sema_init (&exec.load_done, 0);
 
+  /* char *token;
+   char **argv = malloc(DEFAULT_ARGV*sizeof(char *));
+   int i, argc = 0, argv_size = DEFAULT_ARGV;
+   // Push args onto stack
+   for (token = (char *) file_name; token != NULL; token = strtok_r (NULL, " ", save_ptr))
+   {
+      *esp -= strlen(token) + 1;
+      argv[argc] = *esp;
+      argc++;
+      // Resize argv
+      if (argc >= argv_size)
+      {
+         argv_size *= 2;
+         argv = realloc(argv, argv_size*sizeof(char *));
+      }
+      memcpy(*esp, token, strlen(token) + 1);
+    }
+    argv[argc] = 0;
+    // Align to word size (4 bytes)
+    i = (size_t) *esp % WORD_SIZE;
+    if (i)
+    {
+       *esp -= i;
+       memcpy(*esp, &argv[argc], i);
+    }
+   // Push argv[i] for all i
+   for (i = argc; i >= 0; i--)
+   {
+      *esp -= sizeof(char *);
+      memcpy(*esp, &argv[i], sizeof(char *));
+   }
+   // Push argv
+   token = *esp;
+   *esp -= sizeof(char **);
+   memcpy(*esp, &token, sizeof(char **));
+   // Push argc
+   *esp -= sizeof(int);
+   memcpy(*esp, &argc, sizeof(int));
+   // Push fake return addr
+   *esp -= sizeof(void *);
+   memcpy(*esp, &argv[argc], sizeof(void *));
+   // Free argv
+   free(argv);
+   return success;
 
+*/
 
-
+  fn_copy = palloc_get_page (0);
+  if (fn_copy == NULL)
+  return TID_ERROR;
+  strlcpy (fn_copy, file_name, PGSIZE);
+  args = strtok_r(fn_copy, " ", &save_ptr);
 
   /* Create a new thread to execute FILE_NAME. */
   strlcpy (thread_name, file_name, sizeof thread_name);
   strtok_r (thread_name, " ", &save_ptr);
-  tid = thread_create (thread_name, PRI_DEFAULT, start_process, &exec);
+  tid = thread_create (args[0], PRI_DEFAULT, start_process, args[0]);
+   if (tid == TID_ERROR)
+    palloc_free_page (fn_copy); 
+  //sema_up(&s);
+
   if (tid != TID_ERROR)
     {
       sema_down (&exec.load_done);
@@ -143,6 +198,10 @@ release_child (struct wait_status *cs)
 int
 process_wait (tid_t child_tid) 
 {
+ int wait = 1;
+ while(wait == 1){
+
+  };
   return -1;
 }
 
@@ -613,52 +672,6 @@ setup_stack (const char *cmd_line, void **esp)
         palloc_free_page (kpage);
     }
   return success;
-
-
-   char *token;
-   char **argv = malloc(DEFAULT_ARGV*sizeof(char *));
-   int i, argc = 0, argv_size = DEFAULT_ARGV;
-   // Push args onto stack
-   for (token = (char *) file_name; token != NULL; token = strtok_r (NULL, " ", save_ptr))
-   {
-      *esp -= strlen(token) + 1;
-      argv[argc] = *esp;
-      argc++;
-      // Resize argv
-      if (argc >= argv_size)
-      {
-         argv_size *= 2;
-         argv = realloc(argv, argv_size*sizeof(char *));
-      }
-      memcpy(*esp, token, strlen(token) + 1);
-    }
-    argv[argc] = 0;
-    // Align to word size (4 bytes)
-    i = (size_t) *esp % WORD_SIZE;
-    if (i)
-    {
-       *esp -= i;
-       memcpy(*esp, &argv[argc], i);
-    }
-   // Push argv[i] for all i
-   for (i = argc; i >= 0; i--)
-   {
-      *esp -= sizeof(char *);
-      memcpy(*esp, &argv[i], sizeof(char *));
-   }
-   // Push argv
-   token = *esp;
-   *esp -= sizeof(char **);
-   memcpy(*esp, &token, sizeof(char **));
-   // Push argc
-   *esp -= sizeof(int);
-   memcpy(*esp, &argc, sizeof(int));
-   // Push fake return addr
-   *esp -= sizeof(void *);
-   memcpy(*esp, &argv[argc], sizeof(void *));
-   // Free argv
-   free(argv);
-   return success;
 }
 
 /* Adds a mapping from user virtual address UPAGE to kernel

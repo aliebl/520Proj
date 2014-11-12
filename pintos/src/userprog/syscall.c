@@ -13,6 +13,8 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/synch.h"
+
 
 static int sys_halt (void);
 static int sys_exit (int status);
@@ -163,6 +165,7 @@ sys_halt (void)
 static int
 sys_exit (int exit_code) 
 {
+  struct thread *cur = thread_current();
   printf ("%s: exit(%d)\n", cur->name, exit_code);
   thread_current ()->wait_status->exit_code = exit_code;
   thread_exit ();
@@ -173,8 +176,12 @@ sys_exit (int exit_code)
 static int
 sys_exec (const char *ufile) 
 {
-/* Add code */
-  thread_exit ();
+   struct thread *parent = thread_current();
+   struct semaphore *sema;
+   sema_init(&sema, 0);
+   int pid = process_execute(ufile);
+   sema_down(&sema);
+   return pid;
 }
  
 /* Wait system call. */
@@ -248,8 +255,8 @@ lookup_fd (int handle)
 {
    struct thread *t = thread_current();
    struct list_elem *e;
-
-   for (e = list_begin (&t->fds); e != list_end (&t-fds); e = list_next (e))
+   struct list fds;
+   for (e = list_begin (&t->fds); e != list_end (&t->fds); e = list_next (e))
    {
       struct file_descriptor *fd = list_entry (e, struct file_descriptor, elem);
       if (handle == fd->handle)
@@ -269,7 +276,7 @@ sys_filesize (int handle)
    if (!file)
    {
       lock_release(&fs_lock);
-      return ERROR;
+      thread_exit();
    }
    int size = file_length(file);
    lock_release(&fs_lock);
@@ -296,7 +303,7 @@ sys_read (int handle, void *buffer, unsigned size)
    if (!file)
    {
       lock_release(&fs_lock);
-      return ERROR;
+      thread_exit();
    }
    int bytes = file_read(file, buffer, size);
    lock_release(&fs_lock);
@@ -383,7 +390,7 @@ sys_tell (int handle)
    if (!file)
    {
       lock_release(&fs_lock);
-      return ERROR;
+      thread_exit();
    }
    off_t offset = file_tell(file);
    lock_release(&fs_lock);
