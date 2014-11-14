@@ -43,7 +43,7 @@ syscall_init (void)
    lock_init(&fs_lock);
 }
 static void
-syscall_handler (struct intr_frame *f UNUSED)
+syscall_handler (struct intr_frame *f)
 {
    typedef int syscall_function (int, int, int);
    struct syscall
@@ -59,7 +59,13 @@ syscall_handler (struct intr_frame *f UNUSED)
       {1,(syscall_function *) sys_wait},
       {2,(syscall_function *) sys_create},
       {1,(syscall_function *) sys_remove},
-      {1,(syscall_function *) sys_open}
+      {1,(syscall_function *) sys_open},
+      {1,(syscall_function *) sys_filesize},
+      {3,(syscall_function *) sys_read},
+      {3,(syscall_function *) sys_write},
+      {2,(syscall_function *) sys_seek},
+      {1,(syscall_function *) sys_tell},
+      {1,(syscall_function *) sys_close}
    };
 
    const struct syscall *sc;
@@ -165,10 +171,11 @@ sys_halt (void)
 static int
 sys_exit (int exit_code) 
 {
+  lock_acquire(&fs_lock);
   struct thread *cur = thread_current();
-  printf ("%s: exit(%d)\n", cur->name, exit_code);
   thread_current ()->wait_status->exit_code = exit_code;
   thread_exit ();
+  lock_release(&fs_lock);
   NOT_REACHED ();
 }
  
@@ -179,7 +186,7 @@ sys_exec (const char *ufile)
    struct thread *parent = thread_current();
    struct semaphore *sema;
    sema_init(&sema, 0);
-   int pid = start_process(ufile, sema);
+   int pid = process_execute(ufile);
    sema_down(&sema);
    return pid;
 }
@@ -197,6 +204,11 @@ static int
 sys_create (const char *ufile, unsigned initial_size) 
 {
   lock_acquire(&fs_lock);
+  if (!put_user (ufile, initial_size)) 
+      {
+        lock_release (&fs_lock);
+        thread_exit ();
+      }
   bool success = filesys_create(ufile, initial_size);
   lock_release(&fs_lock);
   return success;
@@ -264,7 +276,6 @@ lookup_fd (int handle)
          return fd;
       }
    }
-   thread_exit();
 }
  
 /* Filesize system call. */
@@ -272,13 +283,13 @@ static int
 sys_filesize (int handle) 
 {
    lock_acquire(&fs_lock);
-   struct file_descriptor *file = lookup_fd(handle);
-   if (!file)
+   struct file_descriptor *fd = lookup_fd(handle);
+   if (!fd)
    {
       lock_release(&fs_lock);
       thread_exit();
    }
-   int size = file_length(file);
+   int size = file_length(&fd->file);
    lock_release(&fs_lock);
    return size;
 }
@@ -318,6 +329,7 @@ sys_write (int handle, void *usrc_, unsigned size)
   struct file_descriptor *fd = NULL;
   int bytes_written = 0;
 
+
   /* Lookup up file descriptor. */
   if (handle != STDOUT_FILENO)
     fd = lookup_fd (handle);
@@ -330,6 +342,7 @@ sys_write (int handle, void *usrc_, unsigned size)
       size_t write_amt = size < page_left ? size : page_left;
       off_t retval;
 
+
       /* Check that we can touch this user page. */
       if (!verify_user (usrc)) 
         {
@@ -340,6 +353,7 @@ sys_write (int handle, void *usrc_, unsigned size)
       /* Do the write. */
       if (handle == STDOUT_FILENO)
         {
+
           putbuf (usrc, write_amt);
           retval = write_amt;
         }
@@ -371,13 +385,13 @@ static int
 sys_seek (int handle, unsigned position) 
 {
    lock_acquire(&fs_lock);
-   struct file_descriptor *file = lookup_fd(handle);
-   if (!file)
+   struct file_descriptor *fd = lookup_fd(handle);
+   if (!fd)
    {
       lock_release(&fs_lock);
       return;
    }
-   file_seek(file, position);
+   file_seek(&fd->file, position);
    lock_release(&fs_lock);
 }
  
@@ -386,25 +400,36 @@ static int
 sys_tell (int handle) 
 {
    lock_acquire(&fs_lock);
-   struct file_descriptor *file = lookup_fd(handle);
-   if (!file)
+   struct file_descriptor *fd = lookup_fd(handle);
+   if (!fd)
    {
       lock_release(&fs_lock);
       thread_exit();
    }
-   off_t offset = file_tell(file);
+   off_t offset = file_tell(&fd->file);
    lock_release(&fs_lock);
    return offset;
 }
  
+
+
 /* Close system call. */
 static int
 sys_close (int handle) 
 {
-   lock_acquire(&fs_lock);
-   struct file_descriptor *file = lookup_fd(handle);
-   file_close(file);
-   lock_release(&fs_lock);
+  struct thread *t = thread_current();
+  struct list_elem *e;
+  struct list fds;
+  for (e = list_begin (&t->fds); e != list_end (&t->fds); e = list_next (e))
+    {
+      struct file_descriptor *fd = list_entry (e, struct file_descriptor, elem);
+      if (handle == fd->handle)
+       {
+         file_close(fd->file);
+         list_remove(&fd->elem);
+         free(fd);
+       }
+    }
 }
  
 /* On thread exit, close all open files. */
