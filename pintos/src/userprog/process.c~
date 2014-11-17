@@ -69,7 +69,7 @@ process_execute (const char *file_name)
       if (exec.success)
         list_push_back (&thread_current ()->children, &exec.wait_status->elem);
       else
-        tid = TID_ERROR;
+        tid = -1;
     }
 
   return tid;
@@ -149,7 +149,10 @@ release_child (struct wait_status *cs)
 int
 process_wait (tid_t child_tid) 
 {
-
+int loop = 2;
+while (loop >1){
+loop++;
+}
   return -1;
 }
 
@@ -524,13 +527,20 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 static void
 reverse (int argc, char **argv) 
 {
+
+
   int i;
   for (i = 0; i < argc; i++)
   {
+// printf("ddddddddddddddddddddd");
     char **tmp = argv[i];
     argv[i] = argv[argc - 1];
     argv[argc - 1] = tmp;
+    argc--;
+   
   }
+
+
 }
 
 /* Pushes the SIZE bytes in BUF onto the stack in KPAGE, whose

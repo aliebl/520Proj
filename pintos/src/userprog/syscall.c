@@ -73,15 +73,20 @@ syscall_handler (struct intr_frame *f)
    int args[3];
    /* Get the system call. */
    copy_in (&call_nr, f->esp, sizeof call_nr);
-   if (call_nr >= sizeof syscall_table / sizeof *syscall_table)
-   thread_exit ();
+
+   if (call_nr >= sizeof syscall_table / sizeof *syscall_table) 
+      thread_exit ();
+
    sc = syscall_table + call_nr;
    /* Get the system call arguments. */
    ASSERT (sc->arg_cnt <= sizeof args / sizeof *args);
    memset (args, 0, sizeof args);
+
    copy_in (args, (uint32_t *) f->esp + 1, sizeof *args * sc->arg_cnt);
    /* Execute the system call,and set the return value. */
+
    f->eax = sc->func (args[0], args[1], args[2]);
+
 }
 
 /* Returns true if UADDR is a valid, mapped user address,
@@ -183,6 +188,7 @@ sys_exit (int exit_code)
 static int
 sys_exec (const char *ufile) 
 {
+   if (!is_user_vaddr(ufile)) thread_exit();   
    struct thread *parent = thread_current();
    struct semaphore *sema;
    sema_init(&sema, 0);
@@ -195,14 +201,26 @@ sys_exec (const char *ufile)
 static int
 sys_wait (tid_t child) 
 {
-/* Add code */
-  thread_exit ();
+
+ /* int exit_status = -1;
+  struct wait_status* child_wait_status = find_child (child);
+  if (child_wait_status != NULL)
+  {
+    list_remove (&child_wait_status->elem);
+    sema_down (&child_wait_status->done);
+    exit_status = child_wait_status->exit_status;
+    free(child_wait_status);
+  }
+  return exit_status;
+*/
 }
  
 /* Create system call. */
 static int
 sys_create (const char *ufile, unsigned initial_size) 
 {
+  if(ufile == NULL) thread_exit();
+  if (!is_user_vaddr(ufile)) thread_exit();
   lock_acquire(&fs_lock);
   if (!put_user (ufile, initial_size)) 
       {
@@ -236,15 +254,19 @@ struct file_descriptor
 static int
 sys_open (const char *ufile) 
 {
+  if(ufile == NULL) thread_exit();
+  if (!is_user_vaddr(ufile)) thread_exit();
   char *kfile = copy_in_string (ufile);
+
   struct file_descriptor *fd;
   int handle = -1;
- 
+
   fd = malloc (sizeof *fd);
   if (fd != NULL)
     {
       lock_acquire (&fs_lock);
       fd->file = filesys_open (kfile);
+
       if (fd->file != NULL)
         {
           struct thread *cur = thread_current ();
@@ -256,6 +278,7 @@ sys_open (const char *ufile)
       lock_release (&fs_lock);
     }
   palloc_free_page (kfile);
+
   return handle;
 }
  
@@ -298,6 +321,8 @@ sys_filesize (int handle)
 static int
 sys_read (int handle, void *buffer, unsigned size) 
 {
+  struct file_descriptor *fd = lookup_fd(handle);
+   if (!is_user_vaddr(buffer)) thread_exit();
    if (handle == STDIN_FILENO)
    {
       unsigned i;
@@ -308,15 +333,18 @@ sys_read (int handle, void *buffer, unsigned size)
       }
     return size;
    }
+   else if (fd == STDOUT_FILENO) sys_exit(-1);
 
    lock_acquire(&fs_lock);
-   struct file_descriptor *file = lookup_fd(handle);
-   if (!file)
+ 
+
+   if (!fd)
    {
       lock_release(&fs_lock);
       thread_exit();
    }
-   int bytes = file_read(file, buffer, size);
+
+   int bytes = file_read(fd->file, buffer, size);
    lock_release(&fs_lock);
    return bytes;
 }
@@ -334,6 +362,7 @@ sys_write (int handle, void *usrc_, unsigned size)
   if (handle != STDOUT_FILENO)
     fd = lookup_fd (handle);
 
+ 
   lock_acquire (&fs_lock);
   while (size > 0) 
     {
@@ -417,20 +446,20 @@ sys_tell (int handle)
 static int
 sys_close (int handle) 
 {
-  struct thread *t = thread_current();
-  struct list_elem *e;
-  struct list fds;
-  for (e = list_begin (&t->fds); e != list_end (&t->fds); e = list_next (e))
-    {
-      struct file_descriptor *fd = list_entry (e, struct file_descriptor, elem);
-      if (handle == fd->handle)
-       {
-         file_close(&fd->file);
-         list_remove(&fd->elem);
-         free(fd);
-       }
-    }
+   struct thread * t = thread_current();
+   struct file_descriptor *fd = lookup_fd(handle);
+   if (fd == 0) 
+   { 
+     thread_exit();
+   }
+   if (fd == 1) thread_exit();
+   if( fd == NULL) thread_exit();
+   lock_acquire(&fs_lock);
+   file_close (fd->file); //Close file in the system
+   list_remove(&fd->elem); //Remove file from files table
+   lock_release(&fs_lock);
 }
+
  
 /* On thread exit, close all open files. */
 void
