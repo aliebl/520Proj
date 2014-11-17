@@ -189,30 +189,45 @@ static int
 sys_exec (const char *ufile) 
 {
    if (!is_user_vaddr(ufile)) thread_exit();   
-   struct thread *parent = thread_current();
-   struct semaphore *sema;
-   sema_init(&sema, 0);
-   int pid = process_execute(ufile);
-   sema_down(&sema);
-   return pid;
+   if(ufile == NULL) thread_exit();
+
+    /* Begin executing */
+  int pid =  process_execute (ufile);
+
+  /* If pid allocation fails, exit -1 */
+  if (pid == -1) 
+    return -1;
+
+  /* Wait to receive message about child loading success */
+  struct thread* cur = thread_current ();
+  sema_down (&cur->wait_status->dead);
+
+  if (&cur->wait_status->dead)
+      return pid;
+  else
+      return -1;
 }
  
 /* Wait system call. */
 static int
 sys_wait (tid_t child) 
 {
+  if (!verify_user(child)) thread_exit();
+  struct thread *cur = thread_current ();
+  struct list_elem *e; 
+  struct wait_status *child_info;
 
- /* int exit_status = -1;
-  struct wait_status* child_wait_status = find_child (child);
-  if (child_wait_status != NULL)
-  {
-    list_remove (&child_wait_status->elem);
-    sema_down (&child_wait_status->done);
-    exit_status = child_wait_status->exit_status;
-    free(child_wait_status);
-  }
-  return exit_status;
-*/
+  for (e = list_begin (&cur->children);e != list_end (&cur->children);e = list_next (e))
+    {  
+      child_info = list_entry (e, struct wait_status, elem);
+      if (child_info->tid == child)
+      {
+        if (child_info->already_waited == true)     
+          return -1;
+        child_info->already_waited = true;
+	}
+}
+ return process_wait (child);
 }
  
 /* Create system call. */
@@ -222,11 +237,6 @@ sys_create (const char *ufile, unsigned initial_size)
   if(ufile == NULL) thread_exit();
   if (!is_user_vaddr(ufile)) thread_exit();
   lock_acquire(&fs_lock);
-  if (!put_user (ufile, initial_size)) 
-      {
-        lock_release (&fs_lock);
-        thread_exit ();
-      }
   bool success = filesys_create(ufile, initial_size);
   lock_release(&fs_lock);
   return success;
@@ -312,7 +322,7 @@ sys_filesize (int handle)
       lock_release(&fs_lock);
       thread_exit();
    }
-   int size = file_length(&fd->file);
+   int size = file_length(fd->file);
    lock_release(&fs_lock);
    return size;
 }
@@ -321,32 +331,32 @@ sys_filesize (int handle)
 static int
 sys_read (int handle, void *buffer, unsigned size) 
 {
-  struct file_descriptor *fd = lookup_fd(handle);
-   if (!is_user_vaddr(buffer)) thread_exit();
-   if (handle == STDIN_FILENO)
-   {
-      unsigned i;
-      uint8_t* local_buffer = (uint8_t *) buffer;
+  if (!is_user_vaddr(buffer)) thread_exit();
+  int bytes = 0;
+
+  if (handle == STDIN_FILENO)    
+    {
+      unsigned i = 0;
       for (i = 0; i < size; i++)
-      { 
-         local_buffer[i] = input_getc();
-      }
-    return size;
-   }
-   else if (fd == STDOUT_FILENO) sys_exit(-1);
-
-   lock_acquire(&fs_lock);
- 
-
-   if (!fd)
-   {
-      lock_release(&fs_lock);
-      thread_exit();
-   }
-
-   int bytes = file_read(fd->file, buffer, size);
-   lock_release(&fs_lock);
-   return bytes;
+        {
+          *(uint8_t *)buffer = input_getc();
+          bytes++;
+          buffer++;
+        }
+    }
+  else                  
+    {
+      struct file_descriptor *fd = lookup_fd(handle);
+       if (!fd)
+       {
+          lock_release(&fs_lock);
+          thread_exit();
+       }
+      lock_acquire (&fs_lock);
+      bytes = file_read(fd->file, buffer, size);
+      lock_release (&fs_lock);
+    }
+  return bytes;
 }
  
 /* Write system call. */
@@ -420,7 +430,7 @@ sys_seek (int handle, unsigned position)
       lock_release(&fs_lock);
       return;
    }
-   file_seek(&fd->file, position);
+   file_seek(fd->file, position);
    lock_release(&fs_lock);
 }
  
@@ -435,7 +445,7 @@ sys_tell (int handle)
       lock_release(&fs_lock);
       thread_exit();
    }
-   off_t offset = file_tell(&fd->file);
+   off_t offset = file_tell(fd->file);
    lock_release(&fs_lock);
    return offset;
 }

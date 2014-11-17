@@ -119,6 +119,7 @@ struct wait_status
   {
     struct list_elem elem;              /* `children' list element. */
     struct lock lock;                   /* Protects ref_cnt. */
+    bool already_waited;
     int ref_cnt;                        /* 2=child and parent both alive,
                                            1=either child or parent alive,
                                            0=child and parent both dead. */
