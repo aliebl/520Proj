@@ -150,7 +150,7 @@ int
 process_wait (tid_t child_tid) 
 {
 int loop = 2;
-while (loop >1){
+while (loop <5000){
 loop++;
 }
   return -1;
@@ -527,20 +527,14 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 static void
 reverse (int argc, char **argv) 
 {
-
-
   int i;
   for (i = 0; i < argc; i++)
   {
-// printf("ddddddddddddddddddddd");
     char **tmp = argv[i];
     argv[i] = argv[argc - 1];
     argv[argc - 1] = tmp;
     argc--;
-   
   }
-
-
 }
 
 /* Pushes the SIZE bytes in BUF onto the stack in KPAGE, whose

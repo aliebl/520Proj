@@ -150,7 +150,7 @@ int
 process_wait (tid_t child_tid) 
 {
 int loop = 2;
-while (loop >1){
+while (loop <500000){
 loop++;
 }
   return -1;
